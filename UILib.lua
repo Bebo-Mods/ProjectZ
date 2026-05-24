@@ -150,12 +150,15 @@ local defaults; do
     function library:SetTheme(themeName)
         if library.themes[themeName] then
             pcall(function()
-                library.options = setmetatable(library.themes[themeName], {__index = defaults})
+                -- Update options properly
+                for k, v in pairs(library.themes[themeName]) do
+                    library.options[k] = v
+                end
                 
                 -- Update all existing UI elements
-                for _, window in pairs(library.queue) do
+                for _, data in pairs(library.queue) do
                     pcall(function()
-                        local w = window.w
+                        local w = data.w
                         w.BackgroundColor3 = library.options.topcolor
                         
                         -- Update underline
@@ -992,7 +995,7 @@ local defaults; do
                     library:Create('TextLabel', {
                         Name = 'Selection';
                         Size = UDim2.new(1, 0, 1, 0);
-                        Text = list[1];
+                        Text = list[1] or "Select...";
                         TextColor3 = library.options.textcolor;
                         BackgroundTransparency = 1;
                         Font = library.options.font;
@@ -1018,14 +1021,17 @@ local defaults; do
             
             local button = check:FindFirstChild('dropdown_lbl').drop;
             local input;
+            local container;
             
             button.MouseButton1Click:Connect(function()
                 if (input and input.Connected) then
                     return
                 end 
                 
-                check:FindFirstChild('dropdown_lbl'):WaitForChild('Selection').TextColor3 = Color3.fromRGB(60, 60, 60);
-                check:FindFirstChild('dropdown_lbl'):WaitForChild('Selection').Text = name;
+                pcall(function()
+                    check:FindFirstChild('dropdown_lbl'):WaitForChild('Selection').TextColor3 = Color3.fromRGB(60, 60, 60);
+                end)
+                
                 local c = 0;
                 for i, v in next, list do
                     c = c + 20;
@@ -1041,7 +1047,7 @@ local defaults; do
                 end
                 
                 local goSize = (clampedSize ~= nil and clampedSize) or size;    
-                local container = library:Create('ScrollingFrame', {
+                container = library:Create('ScrollingFrame', {
                     TopImage = 'rbxasset://textures/ui/Scroll/scroll-middle.png';
                     BottomImage = 'rbxasset://textures/ui/Scroll/scroll-middle.png';
                     Name = 'DropContainer';
@@ -1084,8 +1090,18 @@ local defaults; do
                             location[flag] = tostring(btn.Text);
                             callback(location[flag])
 
-                            cloneref(game:GetService('Debris')):AddItem(container, 0)
-                            input:Disconnect();
+                            if container then
+                                container:TweenSize(UDim2.new(1, 0, 0, 0), 'In', 'Quint', .3, true)
+                                task.wait(0.15)
+                                pcall(function()
+                                    cloneref(game:GetService('Debris')):AddItem(container, 0)
+                                end)
+                                container = nil
+                            end
+                            if input then
+                                input:Disconnect();
+                                input = nil
+                            end
                         end)
                     end)
                 end
@@ -1106,29 +1122,44 @@ local defaults; do
                     if a.UserInputType == Enum.UserInputType.MouseButton1 and (not isInGui(container)) then
                         pcall(function()
                             check:FindFirstChild('dropdown_lbl'):WaitForChild('Selection').TextColor3 = library.options.textcolor
-                            check:FindFirstChild('dropdown_lbl'):WaitForChild('Selection').Text       = location[flag];
-
-                            container:TweenSize(UDim2.new(1, 0, 0, 0), 'In', 'Quint', .3, true)
-                            task.wait(0.15)
-
-                            cloneref(game:GetService('Debris')):AddItem(container, 0)
-                            input:Disconnect();
+                            
+                            if container then
+                                container:TweenSize(UDim2.new(1, 0, 0, 0), 'In', 'Quint', .3, true)
+                                task.wait(0.15)
+                                pcall(function()
+                                    cloneref(game:GetService('Debris')):AddItem(container, 0)
+                                end)
+                                container = nil
+                            end
+                            if input then
+                                input:Disconnect();
+                                input = nil
+                            end
                         end)
                     end
                 end)
             end)
             
             self:Resize();
+            
             local function reload(self, array)
-                options = array;
+                list = array;
                 location[flag] = array[1];
                 pcall(function()
-                    input:Disconnect()
+                    if input then
+                        input:Disconnect()
+                        input = nil
+                    end
                 end)
-                check:WaitForChild('dropdown_lbl').Selection.Text = location[flag]
-                check:FindFirstChild('dropdown_lbl'):WaitForChild('Selection').TextColor3 = library.options.textcolor
                 pcall(function()
-                    cloneref(game:GetService('Debris')):AddItem(container, 0)
+                    check:WaitForChild('dropdown_lbl').Selection.Text = location[flag] or "Select..."
+                    check:FindFirstChild('dropdown_lbl'):WaitForChild('Selection').TextColor3 = library.options.textcolor
+                end)
+                pcall(function()
+                    if container then
+                        cloneref(game:GetService('Debris')):AddItem(container, 0)
+                        container = nil
+                    end
                 end)
             end
 
@@ -1138,38 +1169,23 @@ local defaults; do
         end
 
         function types:ColorSettings()
-            local order = self:GetOrder();
-            local check = library:Create('Frame', {
-                BackgroundTransparency = 1;
-                Size = UDim2.new(1, 0, 0, 25);
-                LayoutOrder = order;
-                library:Create('TextLabel', {
-                    Text = "Theme Selector";
-                    BackgroundTransparency = 1;
-                    TextColor3 = library.options.textcolor;
-                    TextStrokeTransparency = library.options.textstroke;
-                    TextStrokeColor3 = library.options.strokecolor;
-                    Position = UDim2.new(0, 5, 0, 0);
-                    Size     = UDim2.new(1, -5, 1, 0);
-                    TextXAlignment = Enum.TextXAlignment.Left;
-                    Font = library.options.font;
-                    TextSize = library.options.fontsize;
-                });
-                Parent = self.container;
-            });
-
+            local self = self;
+            
+            self:Section("Theme Selector")
+            
             local themeNames = {};
             for name, _ in pairs(library.themes) do
                 table.insert(themeNames, name);
             end
 
-            local dropdown = self:Dropdown("Theme", {
+            local dropdown = self:Dropdown("Choose Theme", {
                 list = themeNames,
-                flag = "theme_selector",
-                callback = function(value)
+                flag = "theme_selector_" .. tostring(self.object.Name),
+            }, function(value)
+                if value and library.themes[value] then
                     library:SetTheme(value)
                 end
-            });
+            end)
 
             self:Resize();
             return dropdown;
@@ -1199,57 +1215,78 @@ local defaults; do
     
     function library:Notify(title, text, duration)
         duration = duration or 3
+        
+        local notificationCount = #library.notifications
+        local startPos = UDim2.new(1, 210, 1, -10 - (60 * (notificationCount + 1)))
+        local endPos = UDim2.new(1, -210, 1, -10 - (60 * (notificationCount + 1)))
+        
         local notificationFrame = library:Create('Frame', {
             Name = 'Notification';
             Size = UDim2.new(0, 200, 0, 50);
-            Position = UDim2.new(1, 210, 1, -10 - (60 * (#library.notifications + 1)));
+            Position = startPos;
             BackgroundColor3 = library.options.topcolor;
             BorderColor3 = library.options.bordercolor;
             BorderSizePixel = 1;
-            Parent = library.container.Parent;
+            Parent = library.screenGui;
             ClipsDescendants = true;
             ZIndex = 100;
-            library:Create('TextLabel', {
-                Text = title;
-                Size = UDim2.new(1, -10, 0, 20);
-                Position = UDim2.new(0, 5, 0, 5);
-                BackgroundTransparency = 1;
-                TextColor3 = library.options.titletextcolor;
-                Font = library.options.titlefont;
-                TextSize = 14;
-                TextXAlignment = Enum.TextXAlignment.Left;
-            });
-            library:Create('TextLabel', {
-                Text = text;
-                Size = UDim2.new(1, -10, 0, 20);
-                Position = UDim2.new(0, 5, 0, 25);
-                BackgroundTransparency = 1;
-                TextColor3 = library.options.textcolor;
-                Font = library.options.font;
-                TextSize = 12;
-                TextXAlignment = Enum.TextXAlignment.Left;
-                TextWrapped = true;
-            });
+        });
+        
+        library:Create('TextLabel', {
+            Text = title or "Notification";
+            Size = UDim2.new(1, -10, 0, 20);
+            Position = UDim2.new(0, 5, 0, 5);
+            BackgroundTransparency = 1;
+            TextColor3 = library.options.titletextcolor;
+            Font = library.options.titlefont or Enum.Font.Code;
+            TextSize = 14;
+            TextXAlignment = Enum.TextXAlignment.Left;
+            Parent = notificationFrame;
+        });
+        
+        library:Create('TextLabel', {
+            Text = text or "";
+            Size = UDim2.new(1, -10, 0, 20);
+            Position = UDim2.new(0, 5, 0, 25);
+            BackgroundTransparency = 1;
+            TextColor3 = library.options.textcolor;
+            Font = library.options.font;
+            TextSize = 12;
+            TextXAlignment = Enum.TextXAlignment.Left;
+            TextWrapped = true;
+            Parent = notificationFrame;
         });
 
         table.insert(library.notifications, notificationFrame)
-
-        notificationFrame:TweenPosition(UDim2.new(1, -210, 1, -10 - (60 * (#library.notifications))), 'Out', 'Quad', 0.3, true)
         
+        -- Animate in
+        pcall(function()
+            notificationFrame:TweenPosition(endPos, 'Out', 'Quad', 0.3, true)
+        end)
+        
+        -- Remove after duration
         task.delay(duration, function()
             pcall(function()
-                notificationFrame:TweenPosition(UDim2.new(1, 210, notificationFrame.Position.Y.Scale, notificationFrame.Position.Y.Offset), 'In', 'Quad', 0.3, true)
-                task.wait(0.3)
-                notificationFrame:Destroy()
-                for i, v in pairs(library.notifications) do
-                    if v == notificationFrame then
-                        table.remove(library.notifications, i)
-                        break
+                if notificationFrame and notificationFrame.Parent then
+                    notificationFrame:TweenPosition(UDim2.new(1, 210, endPos.Y.Scale, endPos.Y.Offset), 'In', 'Quad', 0.3, true)
+                    task.wait(0.3)
+                    notificationFrame:Destroy()
+                    
+                    -- Remove from table
+                    for i, v in pairs(library.notifications) do
+                        if v == notificationFrame then
+                            table.remove(library.notifications, i)
+                            break
+                        end
                     end
-                end
-                -- Reposition remaining notifications
-                for i, notif in pairs(library.notifications) do
-                    notif:TweenPosition(UDim2.new(1, -210, 1, -10 - (60 * i)), 'Out', 'Quad', 0.3, true)
+                    
+                    -- Reposition remaining notifications
+                    for i, notif in pairs(library.notifications) do
+                        pcall(function()
+                            local newPos = UDim2.new(1, -210, 1, -10 - (60 * i))
+                            notif:TweenPosition(newPos, 'Out', 'Quad', 0.3, true)
+                        end)
+                    end
                 end
             end)
         end)
@@ -1288,6 +1325,7 @@ local defaults; do
     function library:CreateWindow(name, options)
         if (not library.container) then
             local screenGui = self:Create("ScreenGui", {
+                Name = "UILibrary";
                 self:Create('Frame', {
                     Name = 'Container';
                     Size = UDim2.new(1, -30, 1, 0);
@@ -1300,13 +1338,16 @@ local defaults; do
                          pcall(function() return game:GetService("CoreGui") end) and game:GetService("CoreGui") or
                          game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
             });
+            library.screenGui = screenGui
             library.container = screenGui:FindFirstChild('Container');
         end
         if (not library.options) then
 			library.options = setmetatable(options or {}, {__index = defaults})
         end
 		if (options) then
-			library.options = setmetatable(options, {__index = default})
+			for k, v in pairs(options) do
+                library.options[k] = v
+            end
 		end
 		
         local window = types.window(name, library.options);
