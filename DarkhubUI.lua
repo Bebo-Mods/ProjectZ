@@ -1,6 +1,4 @@
-# Full Premium Roblox UI Library Source
 
-```lua
 -- FULL PREMIUM UI LIBRARY SOURCE
 -- COMPLETE FRAMEWORK
 -- Tabs
@@ -602,6 +600,330 @@ function Library:Tab(name)
             end)
         end
 
+        function GroupAPI:Slider(text, min, max, default, callback)
+
+            local value = default or min
+
+            local SliderFrame = Create("Frame", {
+                Parent = Holder,
+                Size = UDim2.new(1,0,0,46),
+                BackgroundColor3 = Theme.Surface2,
+                BorderSizePixel = 0
+            })
+
+            Create("UICorner", {
+                Parent = SliderFrame,
+                CornerRadius = UDim.new(0,5)
+            })
+
+            local Label = Create("TextLabel", {
+                Parent = SliderFrame,
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0,12,0,0),
+                Size = UDim2.new(1,-24,0,20),
+                Text = text .. " : " .. tostring(value),
+                Font = Enum.Font.Gotham,
+                TextSize = 12,
+                TextColor3 = Theme.Text,
+                TextXAlignment = Enum.TextXAlignment.Left
+            })
+
+            local Bar = Create("Frame", {
+                Parent = SliderFrame,
+                Position = UDim2.new(0,12,0,28),
+                Size = UDim2.new(1,-24,0,6),
+                BackgroundColor3 = Color3.fromRGB(45,45,50),
+                BorderSizePixel = 0
+            })
+
+            Create("UICorner", {
+                Parent = Bar,
+                CornerRadius = UDim.new(1,0)
+            })
+
+            local Fill = Create("Frame", {
+                Parent = Bar,
+                Size = UDim2.new((value-min)/(max-min),0,1,0),
+                BackgroundColor3 = Theme.Accent,
+                BorderSizePixel = 0
+            })
+
+            Create("UICorner", {
+                Parent = Fill,
+                CornerRadius = UDim.new(1,0)
+            })
+
+            local dragging = false
+
+            Connect(Bar.InputBegan, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = true
+                end
+            end)
+
+            Connect(UIS.InputEnded, function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = false
+                end
+            end)
+
+            Connect(UIS.InputChanged, function(input)
+                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    local percent = math.clamp((input.Position.X - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+                    value = math.floor(min + ((max - min) * percent))
+                    Fill.Size = UDim2.new(percent,0,1,0)
+                    Label.Text = text .. " : " .. tostring(value)
+                    pcall(function()
+                        callback(value)
+                    end)
+                end
+            end)
+        end
+
+        function GroupAPI:Textbox(text, placeholder, callback)
+
+            local Box = Create("TextBox", {
+                Parent = Holder,
+                Size = UDim2.new(1,0,0,36),
+                BackgroundColor3 = Theme.Surface2,
+                BorderSizePixel = 0,
+                PlaceholderText = placeholder,
+                Text = "",
+                Font = Enum.Font.Gotham,
+                TextSize = 12,
+                TextColor3 = Theme.Text
+            })
+
+            Create("UICorner", {
+                Parent = Box,
+                CornerRadius = UDim.new(0,5)
+            })
+
+            Connect(Box.FocusLost, function()
+                pcall(function()
+                    callback(Box.Text)
+                end)
+            end)
+        end
+
+        function GroupAPI:Dropdown(text, options, default, callback)
+
+            local selected = default or options[1]
+
+            local Drop = Create("TextButton", {
+                Parent = Holder,
+                Size = UDim2.new(1,0,0,36),
+                BackgroundColor3 = Theme.Surface2,
+                BorderSizePixel = 0,
+                Text = text .. " : " .. tostring(selected),
+                Font = Enum.Font.Gotham,
+                TextSize = 12,
+                TextColor3 = Theme.Text
+            })
+
+            Create("UICorner", {
+                Parent = Drop,
+                CornerRadius = UDim.new(0,5)
+            })
+
+            local opened = false
+
+            local List = Create("Frame", {
+                Parent = Holder,
+                Visible = false,
+                Size = UDim2.new(1,0,0,#options * 30),
+                BackgroundColor3 = Theme.Surface2,
+                BorderSizePixel = 0
+            })
+
+            Create("UICorner", {
+                Parent = List,
+                CornerRadius = UDim.new(0,5)
+            })
+
+            local Layout = Create("UIListLayout", {
+                Parent = List
+            })
+
+            for _,opt in pairs(options) do
+
+                local Btn = Create("TextButton", {
+                    Parent = List,
+                    Size = UDim2.new(1,0,0,30),
+                    BackgroundTransparency = 1,
+                    Text = opt,
+                    Font = Enum.Font.Gotham,
+                    TextSize = 12,
+                    TextColor3 = Theme.Text
+                })
+
+                Connect(Btn.MouseButton1Click, function()
+                    selected = opt
+                    Drop.Text = text .. " : " .. opt
+                    List.Visible = false
+                    opened = false
+                    pcall(function()
+                        callback(opt)
+                    end)
+                end)
+            end
+
+            Connect(Drop.MouseButton1Click, function()
+                opened = not opened
+                List.Visible = opened
+            end)
+        end
+
+        function GroupAPI:Keybind(text, default, callback)
+
+            local current = default or Enum.KeyCode.E
+
+            local Bind = Create("TextButton", {
+                Parent = Holder,
+                Size = UDim2.new(1,0,0,36),
+                BackgroundColor3 = Theme.Surface2,
+                BorderSizePixel = 0,
+                Text = text .. " : " .. current.Name,
+                Font = Enum.Font.Gotham,
+                TextSize = 12,
+                TextColor3 = Theme.Text
+            })
+
+            Create("UICorner", {
+                Parent = Bind,
+                CornerRadius = UDim.new(0,5)
+            })
+
+            local waiting = false
+
+            Connect(Bind.MouseButton1Click, function()
+                waiting = true
+                Bind.Text = text .. " : ..."
+            end)
+
+            Connect(UIS.InputBegan, function(input, gp)
+                if waiting and not gp then
+                    waiting = false
+                    current = input.KeyCode
+                    Bind.Text = text .. " : " .. current.Name
+                    pcall(function()
+                        callback(current)
+                    end)
+                end
+            end)
+        end
+
+        function GroupAPI:MultiDropdown(text, options, default, callback)
+
+            local selected = {}
+
+            for _,v in pairs(default or {}) do
+                selected[v] = true
+            end
+
+            local Main = Create("TextButton", {
+                Parent = Holder,
+                Size = UDim2.new(1,0,0,36),
+                BackgroundColor3 = Theme.Surface2,
+                BorderSizePixel = 0,
+                Text = text,
+                Font = Enum.Font.Gotham,
+                TextSize = 12,
+                TextColor3 = Theme.Text
+            })
+
+            Create("UICorner", {
+                Parent = Main,
+                CornerRadius = UDim.new(0,5)
+            })
+
+            local Container = Create("Frame", {
+                Parent = Holder,
+                Visible = false,
+                Size = UDim2.new(1,0,0,#options * 30),
+                BackgroundColor3 = Theme.Surface2,
+                BorderSizePixel = 0
+            })
+
+            Create("UICorner", {
+                Parent = Container,
+                CornerRadius = UDim.new(0,5)
+            })
+
+            local Layout = Create("UIListLayout", {
+                Parent = Container
+            })
+
+            for _,opt in pairs(options) do
+
+                local Btn = Create("TextButton", {
+                    Parent = Container,
+                    Size = UDim2.new(1,0,0,30),
+                    BackgroundTransparency = 1,
+                    Text = opt,
+                    Font = Enum.Font.Gotham,
+                    TextSize = 12,
+                    TextColor3 = Theme.Text
+                })
+
+                Connect(Btn.MouseButton1Click, function()
+                    selected[opt] = not selected[opt]
+                    pcall(function()
+                        callback(selected)
+                    end)
+                end)
+            end
+
+            local opened = false
+
+            Connect(Main.MouseButton1Click, function()
+                opened = not opened
+                Container.Visible = opened
+            end)
+        end
+
+        function GroupAPI:Colorpicker(text, default, callback)
+
+            local current = default or Color3.fromRGB(255,255,255)
+
+            local Picker = Create("TextButton", {
+                Parent = Holder,
+                Size = UDim2.new(1,0,0,36),
+                BackgroundColor3 = Theme.Surface2,
+                BorderSizePixel = 0,
+                Text = text,
+                Font = Enum.Font.Gotham,
+                TextSize = 12,
+                TextColor3 = Theme.Text
+            })
+
+            Create("UICorner", {
+                Parent = Picker,
+                CornerRadius = UDim.new(0,5)
+            })
+
+            local Preview = Create("Frame", {
+                Parent = Picker,
+                Size = UDim2.new(0,20,0,20),
+                Position = UDim2.new(1,-30,0.5,-10),
+                BackgroundColor3 = current,
+                BorderSizePixel = 0
+            })
+
+            Create("UICorner", {
+                Parent = Preview,
+                CornerRadius = UDim.new(0,4)
+            })
+
+            Connect(Picker.MouseButton1Click, function()
+                current = Color3.fromHSV(math.random(),1,1)
+                Preview.BackgroundColor3 = current
+                pcall(function()
+                    callback(current)
+                end)
+            end)
+        end
+
         return GroupAPI
     end
 
@@ -609,4 +931,4 @@ function Library:Tab(name)
 end
 
 return Library
-```
+
