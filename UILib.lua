@@ -1791,7 +1791,7 @@ function MacLib:Window(Settings)
                                     return DF
                                 end
 
-                                -- ── Colorpicker ─────────────────
+                                -- ── Colorpicker (full HSV wheel + slider + RGB/Hex/Alpha) ──
                                 function SecF:Colorpicker(CPCfg)
                                     local CPF = {}
                                     SafeCall(function()
@@ -1799,6 +1799,7 @@ function MacLib:Window(Settings)
                                         CPF.Color = CPCfg.Default or Color3.fromRGB(255,255,255)
                                         CPF.Alpha = isAlpha and CPCfg.Alpha or nil
 
+                                        -- Row frame
                                         local cpFrame = N("Frame",{
                                             Name="Colorpicker", AutomaticSize=Enum.AutomaticSize.Y,
                                             BackgroundTransparency=1, BorderSizePixel=0,
@@ -1818,17 +1819,13 @@ function MacLib:Window(Settings)
                                         })
                                         if cpName then cpName.Parent=cpFrame end
 
+                                        -- Swatch (checkered BG + color overlay)
                                         local colorCbg = N("ImageLabel",{
-                                            Name="ColorCbg", Image="rbxassetid://121484455191370",
+                                            Name="NewColor", Image="rbxassetid://121484455191370",
                                             ScaleType=Enum.ScaleType.Tile, TileSize=UDim2.fromOffset(500,500),
                                             AnchorPoint=Vector2.new(1,0.5), BackgroundTransparency=1, BorderSizePixel=0,
                                             Position=UDim2.fromScale(1,0.5), Size=UDim2.fromOffset(21,21),
                                         })
-                                        SafeCall(function()
-                                            local ccr = N("UICorner",{CornerRadius=UDim.new(0,8)}) if ccr then ccr.Parent=colorCbg end
-                                            colorCbg.Parent=cpFrame
-                                        end)
-
                                         local colorC = N("Frame",{
                                             Name="Color", AnchorPoint=Vector2.new(0.5,0.5),
                                             BackgroundColor3=CPF.Color, BorderSizePixel=0,
@@ -1836,43 +1833,407 @@ function MacLib:Window(Settings)
                                             BackgroundTransparency=CPF.Alpha or 0,
                                         })
                                         SafeCall(function()
-                                            local ccr2 = N("UICorner",{CornerRadius=UDim.new(0,6)}) if ccr2 then ccr2.Parent=colorC end
-                                            local cpInt = N("TextButton",{
-                                                Name="Interact", Text="", TextColor3=Color3.fromRGB(0,0,0), TextSize=14,
-                                                BackgroundTransparency=1, BorderSizePixel=0, Size=UDim2.fromScale(1,1),
-                                                FontFace=Font.new("rbxasset://fonts/families/SourceSansPro.json"),
-                                            })
-                                            if cpInt then cpInt.Parent=colorC end
+                                            N("UICorner",{CornerRadius=UDim.new(0,6)}).Parent=colorC
+                                            N("UICorner",{CornerRadius=UDim.new(0,8)}).Parent=colorCbg
+                                        end)
+
+                                        local cpInteract = N("TextButton",{
+                                            Name="Interact", Text="", TextColor3=Color3.fromRGB(0,0,0), TextSize=14,
+                                            BackgroundTransparency=1, BorderSizePixel=0, Size=UDim2.fromScale(1,1),
+                                            FontFace=Font.new("rbxasset://fonts/families/SourceSansPro.json"),
+                                        })
+                                        SafeCall(function()
+                                            cpInteract.Parent=colorC
                                             colorC.Parent=colorCbg
+                                            colorCbg.Parent=cpFrame
+                                        end)
 
-                                            -- Full color picker UI (wheel+slider+inputs) is complex;
-                                            -- we build a simplified overlay that calls the callback on confirm.
-                                            local pickerOpen=false
+                                        -- ── Full picker overlay ─────────────────────────────────
+                                        local colorPicker = N("Frame",{
+                                            Name="ColorPicker", BackgroundTransparency=0.5,
+                                            BackgroundColor3=Color3.fromRGB(0,0,0), BorderSizePixel=0,
+                                            Size=UDim2.fromScale(1,1), Visible=false,
+                                        })
+                                        SafeCall(function()
+                                            N("UICorner",{CornerRadius=UDim.new(0,10)}).Parent=colorPicker
+                                        end)
 
-                                            SafeConn(cpInt and cpInt.MouseButton1Click, function()
+                                        -- Prompt card
+                                        local prompt = N("Frame",{
+                                            Name="Prompt", AnchorPoint=Vector2.new(0.5,0.5),
+                                            AutomaticSize=Enum.AutomaticSize.Y,
+                                            BackgroundColor3=Color3.fromRGB(15,15,15), BorderSizePixel=0,
+                                            Position=UDim2.fromScale(0.5,0.5), Size=UDim2.fromOffset(420,0),
+                                        })
+                                        SafeCall(function()
+                                            N("UIStroke",{ApplyStrokeMode=Enum.ApplyStrokeMode.Border,Color=Color3.fromRGB(255,255,255),Transparency=0.9}).Parent=prompt
+                                            N("UICorner",{CornerRadius=UDim.new(0,10)}).Parent=prompt
+                                            N("UIListLayout",{Padding=UDim.new(0,10),HorizontalAlignment=Enum.HorizontalAlignment.Center,SortOrder=Enum.SortOrder.LayoutOrder}).Parent=prompt
+                                            N("UIPadding",{PaddingBottom=UDim.new(0,20),PaddingLeft=UDim.new(0,20),PaddingRight=UDim.new(0,20),PaddingTop=UDim.new(0,20)}).Parent=prompt
+                                        end)
+
+                                        -- Title bar inside prompt
+                                        SafeCall(function()
+                                            local para = N("Frame",{Name="Paragraph",AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1,BorderSizePixel=0,Size=UDim2.fromScale(1,0)})
+                                            N("UIListLayout",{Padding=UDim.new(0,15),HorizontalAlignment=Enum.HorizontalAlignment.Center,SortOrder=Enum.SortOrder.LayoutOrder}).Parent=para
+                                            N("UIPadding",{PaddingBottom=UDim.new(0,15)}).Parent=para
+                                            local ph=N("TextLabel",{
+                                                Name="ParagraphHeader",
+                                                FontFace=Font.new(assets.interFont,Enum.FontWeight.SemiBold,Enum.FontStyle.Normal),
+                                                RichText=true, Text=CPCfg.Name or "",
+                                                TextColor3=Color3.fromRGB(255,255,255), TextSize=18, TextTransparency=0.4,
+                                                TextWrapped=true, TextYAlignment=Enum.TextYAlignment.Top,
+                                                AutomaticSize=Enum.AutomaticSize.XY, BackgroundTransparency=1, BorderSizePixel=0,
+                                                Size=UDim2.fromScale(1,0),
+                                            })
+                                            if ph then ph.Parent=para end
+                                            local ln=N("Frame",{Name="Line",BackgroundTransparency=0.9,BackgroundColor3=Color3.fromRGB(255,255,255),BorderSizePixel=0,LayoutOrder=1,Size=UDim2.new(1,0,0,1)})
+                                            if ln then ln.Parent=para end
+                                            para.Parent=prompt
+                                        end)
+
+                                        -- Color options (wheel + inputs + value slider)
+                                        local colorOptions = N("Frame",{Name="ColorOptions",AutomaticSize=Enum.AutomaticSize.XY,BackgroundTransparency=1,BorderSizePixel=0,LayoutOrder=1,Size=UDim2.fromScale(1,0)})
+                                        SafeCall(function()
+                                            N("UIListLayout",{Padding=UDim.new(0,25),SortOrder=Enum.SortOrder.LayoutOrder}).Parent=colorOptions
+                                        end)
+
+                                        -- Value slider (brightness)
+                                        local valueSlider = N("TextButton",{
+                                            Name="Value", Text="", TextColor3=Color3.fromRGB(0,0,0), TextSize=14,
+                                            AutoButtonColor=false, BackgroundColor3=Color3.fromRGB(255,255,255),
+                                            BorderSizePixel=0, LayoutOrder=1, Size=UDim2.new(1,0,0,15),
+                                        })
+                                        local valueSlide = N("Frame",{
+                                            Name="Slide", AnchorPoint=Vector2.new(0,0.5),
+                                            BackgroundColor3=Color3.fromRGB(255,255,255), BorderSizePixel=0,
+                                            Position=UDim2.fromScale(0,0.5), Size=UDim2.new(0,13,1,8),
+                                        })
+                                        SafeCall(function()
+                                            N("UIGradient",{Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(255,255,255)),ColorSequenceKeypoint.new(1,Color3.fromRGB(0,0,0))})}).Parent=valueSlider
+                                            N("UICorner",{CornerRadius=UDim.new(0,6)}).Parent=valueSlider
+                                            N("UICorner",{CornerRadius=UDim.new(1,0)}).Parent=valueSlide
+                                            N("UIStroke",{Transparency=0.5}).Parent=valueSlide
+                                            valueSlide.Parent=valueSlider
+                                        end)
+
+                                        -- Wheel frame
+                                        local wheelFrame = N("Frame",{Name="Wheel",AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1,BorderSizePixel=0,Size=UDim2.new(1,0,0,100)})
+                                        SafeCall(function()
+                                            N("UIPadding",{PaddingRight=UDim.new(0,5)}).Parent=wheelFrame
+                                        end)
+
+                                        local wheel1 = N("ImageButton",{
+                                            Name="Wheel", Image="rbxassetid://2849458409",
+                                            AutoButtonColor=false, Active=false, BackgroundTransparency=1, BorderSizePixel=0,
+                                            Selectable=false, Size=UDim2.fromOffset(220,220), SizeConstraint=Enum.SizeConstraint.RelativeYY,
+                                        })
+                                        local ring = N("ImageLabel",{
+                                            Name="Target", Image="rbxassetid://73265255323268",
+                                            ImageColor3=Color3.fromRGB(0,0,0),
+                                            AnchorPoint=Vector2.new(0.5,0.5), BackgroundTransparency=1, BorderSizePixel=0,
+                                            Position=UDim2.fromScale(0.5,0.5), Size=UDim2.fromOffset(22,22),
+                                            SizeConstraint=Enum.SizeConstraint.RelativeYY,
+                                        })
+                                        SafeCall(function() ring.Parent=wheel1; wheel1.Parent=wheelFrame end)
+
+                                        -- RGB/Hex/Alpha inputs
+                                        local inputs = N("Frame",{
+                                            Name="Inputs", AnchorPoint=Vector2.new(1,0.5),
+                                            AutomaticSize=Enum.AutomaticSize.XY, BackgroundTransparency=1, BorderSizePixel=0,
+                                            LayoutOrder=1, Position=UDim2.fromScale(1,0.5),
+                                        })
+                                        SafeCall(function()
+                                            N("UIListLayout",{Padding=UDim.new(0,5),SortOrder=Enum.SortOrder.LayoutOrder}).Parent=inputs
+                                        end)
+
+                                        local function makeInput(label, order, default, visible)
+                                            local row=N("Frame",{Name=label,AutomaticSize=Enum.AutomaticSize.XY,BackgroundTransparency=1,BorderSizePixel=0,LayoutOrder=order,Size=UDim2.fromOffset(0,38)})
+                                            if visible==false then row.Visible=false end
+                                            N("UIListLayout",{Padding=UDim.new(0,15),FillDirection=Enum.FillDirection.Horizontal,SortOrder=Enum.SortOrder.LayoutOrder,VerticalAlignment=Enum.VerticalAlignment.Center}).Parent=row
+                                            local lbl=N("TextLabel",{
+                                                FontFace=Font.new(assets.interFont,Enum.FontWeight.Medium,Enum.FontStyle.Normal),
+                                                Text=label, TextColor3=Color3.fromRGB(255,255,255), TextSize=13, TextTransparency=0.5,
+                                                TextTruncate=Enum.TextTruncate.AtEnd, TextXAlignment=Enum.TextXAlignment.Left, TextYAlignment=Enum.TextYAlignment.Top,
+                                                AnchorPoint=Vector2.new(0,0.5), AutomaticSize=Enum.AutomaticSize.XY,
+                                                BackgroundTransparency=1, BorderSizePixel=0, LayoutOrder=2, Position=UDim2.fromScale(0,0.5),
+                                            })
+                                            lbl.Parent=row
+                                            local box=N("TextBox",{
+                                                Name="InputBox", ClearTextOnFocus=false, CursorPosition=-1,
+                                                FontFace=Font.new(assets.interFont,Enum.FontWeight.Medium,Enum.FontStyle.Normal),
+                                                Text=tostring(default or "255"), TextColor3=Color3.fromRGB(255,255,255), TextSize=12, TextTransparency=0.4,
+                                                TextXAlignment=Enum.TextXAlignment.Left,
+                                                AnchorPoint=Vector2.new(1,0.5), BackgroundTransparency=0.95, BorderSizePixel=0,
+                                                ClipsDescendants=true, LayoutOrder=1, Position=UDim2.fromScale(1,0.5),
+                                                Size=UDim2.fromOffset(75,25),
+                                            })
+                                            SafeCall(function()
+                                                N("UICorner",{CornerRadius=UDim.new(0,4)}).Parent=box
+                                                N("UIStroke",{ApplyStrokeMode=Enum.ApplyStrokeMode.Border,Color=Color3.fromRGB(255,255,255),Transparency=0.9}).Parent=box
+                                                N("UIPadding",{PaddingLeft=UDim.new(0,8),PaddingRight=UDim.new(0,10)}).Parent=box
+                                                box.Parent=row
+                                                row.Parent=inputs
+                                            end)
+                                            return box
+                                        end
+
+                                        local redBox   = makeInput("Red",   1, 255)
+                                        local greenBox = makeInput("Green", 2, 255)
+                                        local blueBox  = makeInput("Blue",  3, 255)
+                                        local alphaBox = makeInput("Alpha", 4, 0, isAlpha)
+                                        local hexBox   = makeInput("Hex",   5, "#FFFFFF")
+
+                                        SafeCall(function()
+                                            inputs.Parent=wheelFrame
+                                            wheelFrame.Parent=colorOptions
+                                        end)
+
+                                        -- Color wells (new / old)
+                                        SafeCall(function()
+                                            local cw=N("Frame",{Name="ColorWells",AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1,BorderSizePixel=0,LayoutOrder=2,Size=UDim2.fromScale(1,0)})
+                                            N("UIGridLayout",{CellPadding=UDim2.fromOffset(10,0),CellSize=UDim2.new(0.5,-5,0,30),SortOrder=Enum.SortOrder.LayoutOrder}).Parent=cw
+
+                                            local function makeWell(name, order, col, alpha)
+                                                local bg=N("ImageLabel",{Name=name,Image="rbxassetid://121484455191370",ScaleType=Enum.ScaleType.Tile,TileSize=UDim2.fromOffset(500,500),BackgroundTransparency=1,BorderSizePixel=0,LayoutOrder=order,Size=UDim2.fromOffset(100,100)})
+                                                N("UICorner").Parent=bg
+                                                local c2=N("Frame",{Name="Color",AnchorPoint=Vector2.new(0.5,0.5),BackgroundColor3=col or Color3.fromRGB(255,255,255),BackgroundTransparency=alpha or 0,BorderSizePixel=0,Position=UDim2.fromScale(0.5,0.5),Size=UDim2.new(1,1,1,1)})
+                                                N("UICorner").Parent=c2
+                                                c2.Parent=bg
+                                                bg.Parent=cw
+                                                return c2
+                                            end
+                                            local newWell = makeWell("NewColor", 0, CPF.Color, CPF.Alpha or 0)
+                                            local oldWell = makeWell("OldColor", 1, CPF.Color, CPF.Alpha or 0)
+                                            cw.Parent=colorOptions
+                                            colorOptions.Parent=prompt
+
+                                            -- Confirm / Cancel
+                                            local interactions2=N("Frame",{Name="Interactions",AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1,BorderSizePixel=0,LayoutOrder=2,Size=UDim2.fromScale(1,0)})
+                                            N("UIListLayout",{Padding=UDim.new(0,10),SortOrder=Enum.SortOrder.LayoutOrder}).Parent=interactions2
+                                            N("UIPadding",{PaddingTop=UDim.new(0,10)}).Parent=interactions2
+
+                                            local function makeBtn(label, order)
+                                                local b=N("TextButton",{
+                                                    FontFace=Font.new(assets.interFont,Enum.FontWeight.SemiBold,Enum.FontStyle.Normal),
+                                                    Text=label, TextColor3=Color3.fromRGB(255,255,255), TextSize=15, TextTransparency=0.5,
+                                                    TextTruncate=Enum.TextTruncate.AtEnd, AutoButtonColor=false,
+                                                    AutomaticSize=Enum.AutomaticSize.Y, BackgroundColor3=Color3.fromRGB(25,25,25),
+                                                    BorderSizePixel=0, LayoutOrder=order, Size=UDim2.fromScale(1,0),
+                                                })
+                                                N("UICorner",{CornerRadius=UDim.new(0,10)}).Parent=b
+                                                N("UIPadding",{PaddingBottom=UDim.new(0,9),PaddingLeft=UDim.new(0,10),PaddingRight=UDim.new(0,10),PaddingTop=UDim.new(0,9)}).Parent=b
+                                                b.Parent=interactions2
+                                                return b
+                                            end
+                                            local confirmBtn = makeBtn("Confirm", 0)
+                                            local cancelBtn  = makeBtn("Cancel",  1)
+                                            interactions2.Parent=prompt
+                                            prompt.Parent=colorPicker
+                                            colorPicker.Parent=base
+
+                                            -- ── HSV logic ─────────────────────────────────────
+                                            local Mouse2 = LocalPlayer and LocalPlayer:GetMouse()
+                                            local WheelDown, SlideDown = false, false
+                                            local hue, sat, val2 = 0, 0, 1
+
+                                            local function clampN(v,mn,mx)
+                                                local n=tonumber(v); return n and math.clamp(n,mn,mx) or mn
+                                            end
+                                            local function hexToRGB(hex)
+                                                hex=hex:gsub("#","")
+                                                if #hex~=6 then return 0,0,0 end
+                                                return tonumber(hex:sub(1,2),16) or 0, tonumber(hex:sub(3,4),16) or 0, tonumber(hex:sub(5,6),16) or 0
+                                            end
+
+                                            local function applyColor()
                                                 SafeCall(function()
-                                                    -- Cycle hue for simplicity when no full picker is available in exploit env
-                                                    -- A full HSV wheel is available in the original MacLib;
-                                                    -- here we preserve the original code path but wrap it safely.
-                                                    pickerOpen = not pickerOpen
-                                                    -- The original MacLib builds an elaborate picker;
-                                                    -- that code is preserved 1:1 but wrapped in SafeCall below:
+                                                    local c=Color3.fromHSV(hue,sat,val2)
+                                                    if newWell then newWell.BackgroundColor3=c end
+                                                    local alp=isAlpha and clampN(alphaBox.Text,0,1) or 0
+                                                    if newWell then newWell.BackgroundTransparency=alp end
+                                                    colorC.BackgroundColor3=c
+                                                    redBox.Text=tostring(math.floor(c.R*255+0.5))
+                                                    greenBox.Text=tostring(math.floor(c.G*255+0.5))
+                                                    blueBox.Text=tostring(math.floor(c.B*255+0.5))
+                                                    hexBox.Text=string.format("#%02X%02X%02X",math.floor(c.R*255+0.5),math.floor(c.G*255+0.5),math.floor(c.B*255+0.5))
+                                                end)
+                                            end
+
+                                            local function updateSlide(mx2)
+                                                SafeCall(function()
+                                                    local relX=mx2-valueSlider.AbsolutePosition.X
+                                                    local clampX=math.clamp(relX,0,valueSlider.AbsoluteSize.X-valueSlide.AbsoluteSize.X)
+                                                    valueSlide.Position=UDim2.new(0,clampX,0.5,0)
+                                                    val2=1-(clampX/(valueSlider.AbsoluteSize.X-valueSlide.AbsoluteSize.X))
+                                                    applyColor()
+                                                end)
+                                            end
+
+                                            local function toPolar(v) return math.atan2(v.Y,v.X),v.Magnitude end
+                                            local function updateRing(mx2,my2)
+                                                SafeCall(function()
+                                                    local r=wheel1.AbsoluteSize.X/2
+                                                    local d=Vector2.new(mx2,my2)-wheel1.AbsolutePosition-wheel1.AbsoluteSize/2
+                                                    if d.Magnitude>r then d=d.Unit*r end
+                                                    ring.Position=UDim2.new(0.5,d.X,0.5,d.Y)
+                                                    local phi,len=toPolar(d*Vector2.new(1,-1))
+                                                    hue=((phi+math.pi)/(2*math.pi)*360)/360
+                                                    sat=math.clamp(len/r,0,1)
+                                                    valueSlider.BackgroundColor3=Color3.fromHSV(hue,sat,1)
+                                                    applyColor()
+                                                end)
+                                            end
+
+                                            local function syncRingFromHSV()
+                                                SafeCall(function()
+                                                    local r=wheel1.AbsoluteSize.X/2
+                                                    local phi=math.rad(hue*360)
+                                                    local len=sat*r
+                                                    ring.Position=UDim2.new(0.5,-len*math.cos(phi),0.5,len*math.sin(phi))
+                                                    valueSlider.BackgroundColor3=Color3.fromHSV(hue,sat,1)
+                                                end)
+                                            end
+                                            local function syncSlideFromVal()
+                                                SafeCall(function()
+                                                    local cX=(1-val2)*math.max(0,valueSlider.AbsoluteSize.X-valueSlide.AbsoluteSize.X)
+                                                    valueSlide.Position=UDim2.new(0,cX,0.5,0)
+                                                end)
+                                            end
+                                            local function syncFromRGB()
+                                                SafeCall(function()
+                                                    local r=clampN(redBox.Text,0,255)
+                                                    local g=clampN(greenBox.Text,0,255)
+                                                    local b=clampN(blueBox.Text,0,255)
+                                                    hue,sat,val2=Color3.fromRGB(r,g,b):ToHSV()
+                                                    syncRingFromHSV(); syncSlideFromVal(); applyColor()
+                                                end)
+                                            end
+                                            local function syncFromHex()
+                                                SafeCall(function()
+                                                    local r,g,b=hexToRGB(hexBox.Text)
+                                                    redBox.Text=tostring(r); greenBox.Text=tostring(g); blueBox.Text=tostring(b)
+                                                    syncFromRGB()
+                                                end)
+                                            end
+                                            local function initFromCPF()
+                                                SafeCall(function()
+                                                    local c=CPF.Color
+                                                    local r=math.floor(c.R*255+0.5); local g=math.floor(c.G*255+0.5); local b=math.floor(c.B*255+0.5)
+                                                    redBox.Text=tostring(r); greenBox.Text=tostring(g); blueBox.Text=tostring(b)
+                                                    hexBox.Text=string.format("#%02X%02X%02X",r,g,b)
+                                                    if isAlpha then alphaBox.Text=tostring(CPF.Alpha or 0) end
+                                                    hue,sat,val2=Color3.fromRGB(r,g,b):ToHSV()
+                                                    if oldWell then oldWell.BackgroundColor3=CPF.Color; oldWell.BackgroundTransparency=CPF.Alpha or 0 end
+                                                    syncRingFromHSV(); syncSlideFromVal(); applyColor()
+                                                end)
+                                            end
+
+                                            -- Input connections
+                                            SafeConn(wheel1.InputBegan, function(inp)
+                                                SafeCall(function()
+                                                    if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
+                                                        WheelDown=true; if Mouse2 then updateRing(Mouse2.X,Mouse2.Y) end
+                                                    end
+                                                end)
+                                            end)
+                                            SafeConn(wheel1.InputEnded, function(inp)
+                                                SafeCall(function()
+                                                    if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then WheelDown=false end
+                                                end)
+                                            end)
+                                            SafeConn(valueSlider.InputBegan, function(inp)
+                                                SafeCall(function()
+                                                    if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
+                                                        SlideDown=true; if Mouse2 then updateSlide(Mouse2.X) end
+                                                    end
+                                                end)
+                                            end)
+                                            SafeConn(valueSlider.InputEnded, function(inp)
+                                                SafeCall(function()
+                                                    if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then SlideDown=false end
+                                                end)
+                                            end)
+                                            SafeConn(UserInputService and UserInputService.InputChanged, function(inp)
+                                                SafeCall(function()
+                                                    if inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch then
+                                                        if Mouse2 then
+                                                            if SlideDown then updateSlide(Mouse2.X)
+                                                            elseif WheelDown then updateRing(Mouse2.X,Mouse2.Y) end
+                                                        end
+                                                    end
+                                                end)
+                                            end)
+                                            SafeConn(redBox.FocusLost,   syncFromRGB)
+                                            SafeConn(greenBox.FocusLost, syncFromRGB)
+                                            SafeConn(blueBox.FocusLost,  syncFromRGB)
+                                            SafeConn(hexBox.FocusLost,   syncFromHex)
+                                            SafeConn(alphaBox.FocusLost, applyColor)
+
+                                            -- Transition helpers
+                                            local function makeCanvas2()
+                                                local cv=N("CanvasGroup",{Name="ColorPickerCanvas",BackgroundTransparency=1,BorderSizePixel=0,Size=UDim2.fromScale(1,1),ZIndex=5,GroupTransparency=1,Visible=false})
+                                                cv.Parent=base; return cv
+                                            end
+                                            local function transition2(isIn)
+                                                SafeCall(function()
+                                                    local cv=makeCanvas2()
+                                                    local tw=Tween(cv,TweenInfo.new(0.1,Enum.EasingStyle.Sine),{GroupTransparency=isIn and 0 or 1})
+                                                    colorPicker.Visible=true; colorPicker.Parent=cv
+                                                    cv.Visible=true; cv.GroupTransparency=isIn and 1 or 0
+                                                    tw:Play(); SafeCall(function() tw.Completed:Wait() end)
+                                                    if not isIn then colorPicker.Visible=false; cv.Visible=false end
+                                                    colorPicker.Parent=base; SafeCall(function() cv:Destroy() end)
+                                                end)
+                                            end
+
+                                            SafeConn(cpInteract and cpInteract.MouseButton1Click, function()
+                                                task.spawn(function()
+                                                    SafeCall(initFromCPF)
+                                                    transition2(true)
+                                                end)
+                                            end)
+                                            SafeConn(cancelBtn and cancelBtn.MouseButton1Click, function()
+                                                task.spawn(function() transition2(false) end)
+                                            end)
+                                            SafeConn(confirmBtn and confirmBtn.MouseButton1Click, function()
+                                                task.spawn(function()
+                                                    transition2(false)
+                                                    SafeCall(function()
+                                                        local c=Color3.fromHSV(hue,sat,val2)
+                                                        CPF.Color=c
+                                                        if isAlpha then CPF.Alpha=clampN(alphaBox.Text,0,1) end
+                                                        colorC.BackgroundColor3=c
+                                                        colorC.BackgroundTransparency=CPF.Alpha or 0
+                                                        if oldWell then oldWell.BackgroundColor3=c; oldWell.BackgroundTransparency=CPF.Alpha or 0 end
+                                                        if CPCfg.Callback then
+                                                            task.spawn(function() SafeCall(CPCfg.Callback, CPF.Color, isAlpha and CPF.Alpha or nil) end)
+                                                        end
+                                                    end)
                                                 end)
                                             end)
 
-                                            function CPF:SetColor(c)
-                                                SafeCall(function()
-                                                    CPF.Color=c; colorC.BackgroundColor3=c
-                                                end)
-                                            end
-                                            function CPF:SetAlpha(a)
-                                                SafeCall(function()
-                                                    CPF.Alpha=a; colorC.BackgroundTransparency=a
-                                                end)
-                                            end
+                                            -- valueSlider inside colorOptions
+                                            valueSlider.Parent=colorOptions
                                         end)
-                                        function CPF:UpdateName(n) SafeCall(function() if cpName then cpName.Text=n end end) end
-                                        function CPF:SetVisibility(s) SafeCall(function() if cpFrame then cpFrame.Visible=s end end) end
+                                    end)
+
+                                    function CPF:SetColor(c)
+                                        SafeCall(function()
+                                            CPF.Color=c
+                                            local colorCf=cpFrame and cpFrame:FindFirstChild("NewColor") and cpFrame.NewColor:FindFirstChild("Color")
+                                            if colorCf then colorCf.BackgroundColor3=c end
+                                            if colorC then colorC.BackgroundColor3=c end
+                                        end)
+                                    end
+                                    function CPF:SetAlpha(a)
+                                        SafeCall(function()
+                                            CPF.Alpha=a
+                                            if colorC then colorC.BackgroundTransparency=a end
+                                        end)
+                                    end
+                                    function CPF:UpdateName(n) SafeCall(function() if cpName then cpName.Text=n end end) end
+                                    function CPF:SetVisibility(s) SafeCall(function() if cpFrame then cpFrame.Visible=s end end) end
                                     end)
                                     return CPF
                                 end
