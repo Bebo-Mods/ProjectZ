@@ -2217,6 +2217,7 @@ function MacLib:Window(Settings)
                                             valueSlider.Parent=colorOptions
                                         end)
                                     end)
+                                    end)
 
                                     function CPF:SetColor(c)
                                         SafeCall(function()
@@ -2234,7 +2235,6 @@ function MacLib:Window(Settings)
                                     end
                                     function CPF:UpdateName(n) SafeCall(function() if cpName then cpName.Text=n end end) end
                                     function CPF:SetVisibility(s) SafeCall(function() if cpFrame then cpFrame.Visible=s end end) end
-                                    end)
                                     return CPF
                                 end
 
