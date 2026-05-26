@@ -17,7 +17,7 @@
 -- Topbar Dock Mode
 -- Blur Controller
 -- Executor Safe
-
+print("updated")
 local cloneref = cloneref or function(v)
     return v
 end
