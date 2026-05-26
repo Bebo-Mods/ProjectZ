@@ -17,7 +17,7 @@
 -- Topbar Dock Mode
 -- Blur Controller
 -- Executor Safe
-print("updated")
+
 local cloneref = cloneref or function(v)
     return v
 end
@@ -49,6 +49,12 @@ end)
 
 local Theme = {
     Accent = Color3.fromRGB(0,255,120),
+    Themes = {
+        Green = Color3.fromRGB(0,255,120),
+        Red = Color3.fromRGB(255,80,80),
+        Blue = Color3.fromRGB(0,170,255),
+        Purple = Color3.fromRGB(170,85,255)
+    },
     Background = Color3.fromRGB(17,17,21),
     Sidebar = Color3.fromRGB(13,13,16),
     Surface = Color3.fromRGB(28,28,34),
@@ -59,8 +65,39 @@ local Theme = {
 
 local Library = {
     Connections = {},
-    Flags = {}
+    Flags = {},
+    ThemeObjects = {},
+    Dropdowns = {},
+    Canvases = {}
 }
+
+local function RegisterTheme(obj, property)
+    table.insert(Library.ThemeObjects, {
+        Object = obj,
+        Property = property
+    })
+end
+
+function Library:SetTheme(name)
+
+    local color = Theme.Themes[name]
+
+    if not color then
+        return
+    end
+
+    Theme.Accent = color
+
+    for _,v in pairs(Library.ThemeObjects) do
+        pcall(function()
+            v.Object[v.Property] = color
+        end)
+    end
+end
+
+local function UpdateCanvas(canvas, layout)
+    canvas.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 10)
+end
 
 local function Create(class, props)
 
@@ -458,6 +495,7 @@ function Library:Tab(name)
 
     if #Tabs == 1 then
         Button.BackgroundColor3 = Theme.Accent
+        RegisterTheme(Button, "BackgroundColor3")
         Button.TextColor3 = Color3.new(0,0,0)
         Page.Visible = true
     end
@@ -748,6 +786,7 @@ function Library:Tab(name)
                     local percent = math.clamp((input.Position.X - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
                     value = math.floor(min + ((max - min) * percent))
                     Fill.Size = UDim2.new(percent,0,1,0)
+                    RegisterTheme(Fill, "BackgroundColor3")
                     Label.Text = text .. " : " .. tostring(value)
                     pcall(function()
                         callback(value)
