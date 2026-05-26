@@ -1,14 +1,7 @@
 --[[
-    DARKHUB V2 — ULTIMATE PRODUCTION EDITION
-    Final round of fixes:
-    - LoadConfig preserves table identity
-    - ThemeObjects cleaned of dead references
-    - Notification limit (auto‑purge oldest)
-    - All callbacks run in task.spawn (non‑blocking)
-    - Keybind state reset on destroy
-    - Tween references self‑cleaned
-    - Central IsAlive() validation
-    - Blur reused globally, no collisions
+    DARKHUB V2 – ATTRIBUTE‑SAFE EDITION
+    All custom instance fields replaced with SetAttribute/GetAttribute.
+    Zero runtime crashes on Roblox instances.
 ]]
 
 local cloneref = cloneref or function(v) return v end
@@ -38,8 +31,8 @@ local Library = {
     OpenColorpicker = nil,
     Keybinds = {},
     Elements = {},
-    ToggleSwitches = {},
-    MultiOptions = {},
+    ToggleSwitches = {},       -- stores Switch frames (we'll use attributes)
+    MultiOptions = {},         -- stores option buttons (use attributes)
     DetachedFrames = {},
     ActiveTweens = {},
     CreatedBlur = false,
@@ -212,24 +205,30 @@ function Library:SetTheme(accentColor)
             pcall(function() v.Object[v.Property] = accentColor end)
         end
     end
+    -- Update toggle switches that are ON (using attributes)
     for _, switchFrame in ipairs(self.ToggleSwitches) do
-        if IsAlive(switchFrame) and switchFrame.State then
+        if IsAlive(switchFrame) and switchFrame:GetAttribute("State") then
             switchFrame.BackgroundColor3 = accentColor
         end
     end
+    -- Update selected multi‑dropdown options (using attributes)
     for _, optButton in ipairs(self.MultiOptions) do
-        if IsAlive(optButton) and optButton.Selected then
+        if IsAlive(optButton) and optButton:GetAttribute("Selected") then
             optButton.BackgroundColor3 = accentColor
         end
     end
+    -- Update tab buttons based on selection state (using attributes)
     for _, tab in ipairs(self.Tabs) do
         if IsAlive(tab.Button) then
-            tab.Button.BackgroundColor3 = tab.Button.IsSelected and accentColor or self.Theme.Surface
+            tab.Button.BackgroundColor3 =
+                tab.Button:GetAttribute("IsSelected") and accentColor or self.Theme.Surface
         end
     end
 end
 
--- GUI Setup
+-- ==============================================
+-- GUI SETUP
+-- ==============================================
 local ScreenGui = Create("ScreenGui", {
     Name = "DarkHubV2",
     Parent = HiddenUI,
@@ -264,6 +263,7 @@ ThemeObject(Main, "BackgroundColor3", "Background")
 
 -- Topbar
 local Topbar = Create("Frame", { Parent = Main, Size = UDim2.new(1,0,0,42), BackgroundTransparency = 1 })
+
 local Title = Create("TextLabel", {
     Parent = Topbar, Position = UDim2.new(0,14,0,0), Size = UDim2.new(1,0,1,0),
     BackgroundTransparency = 1, Font = Enum.Font.GothamBold, Text = "DARKHUB V2",
@@ -564,7 +564,7 @@ ConnectAndStore(UIS.InputBegan, function(input)
 end)
 
 -- ==============================================
--- TAB SYSTEM
+-- TAB SYSTEM (all IsSelected/State/Selected use attributes)
 -- ==============================================
 function Library:Tab(name)
     local TabButton = Create("TextButton", {
@@ -574,7 +574,7 @@ function Library:Tab(name)
     })
     Corner(TabButton, 6)
     ThemeObject(TabButton, "TextColor3", "Text")
-    TabButton.IsSelected = false
+    TabButton:SetAttribute("IsSelected", false)   -- FIXED
 
     local Page = Create("Frame", { Parent = Content, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Visible = false })
     local Left = Create("ScrollingFrame", { Parent = Page, Size = UDim2.new(0.5,-8,1,0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new() })
@@ -585,11 +585,11 @@ function Library:Tab(name)
     local function Select()
         for _,v in pairs(Library.Tabs) do
             v.Page.Visible = false
-            v.Button.IsSelected = false
+            v.Button:SetAttribute("IsSelected", false)   -- FIXED
             v.Button.BackgroundColor3 = Library.Theme.Surface
         end
         Page.Visible = true
-        TabButton.IsSelected = true
+        TabButton:SetAttribute("IsSelected", true)   -- FIXED
         TabButton.BackgroundColor3 = Library.Theme.Accent
     end
     TabButton.MouseButton1Click:Connect(Select)
@@ -653,7 +653,7 @@ function Library:Tab(name)
             end)
         end
 
-        -- Toggle
+        -- Toggle (using attributes for state)
         function GroupAPI:Toggle(text, default, callback)
             if not Library:RegisterFlag(text, default) then return end
             local State = default
@@ -680,14 +680,14 @@ function Library:Tab(name)
                 Size = UDim2.new(0,16,0,16), BackgroundColor3 = Color3.new(1,1,1), BorderSizePixel = 0
             })
             Corner(Knob, 20)
-            Switch.State = State
+            Switch:SetAttribute("State", State)   -- FIXED
             table.insert(Library.ToggleSwitches, Switch)
 
             Frame.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
                     State = not State
                     Library.Flags[text] = State
-                    Switch.State = State
+                    Switch:SetAttribute("State", State)   -- FIXED
                     Switch.BackgroundColor3 = State and Library.Theme.Accent or Color3.fromRGB(55,55,55)
                     createTween(Knob, TweenInfo.new(0.15), {
                         Position = State and UDim2.new(1,-18,0.5,-8) or UDim2.new(0,2,0.5,-8)
@@ -700,7 +700,7 @@ function Library:Tab(name)
                 Set = function(_, v, silent)
                     State = v
                     Library.Flags[text] = v
-                    Switch.State = v
+                    Switch:SetAttribute("State", v)   -- FIXED
                     Switch.BackgroundColor3 = State and Library.Theme.Accent or Color3.fromRGB(55,55,55)
                     Knob.Position = State and UDim2.new(1,-18,0.5,-8) or UDim2.new(0,2,0.5,-8)
                     if not silent then
@@ -708,13 +708,13 @@ function Library:Tab(name)
                     end
                 end,
                 Get = function() return State end,
-                Destroy = function() Switch.State = false end
+                Destroy = function() Switch:SetAttribute("State", false) end
             }
             Library.Elements[text] = control
             return control
         end
 
-        -- Slider
+        -- Slider (unchanged except using attributes where needed – none here)
         function GroupAPI:Slider(text, min, max, default, decimals, callback)
             if type(decimals) == "function" then callback = decimals; decimals = 0 end
             decimals = decimals or 0
@@ -791,7 +791,7 @@ function Library:Tab(name)
             return control
         end
 
-        -- Dropdown
+        -- Dropdown (using attributes for selected? not needed – we use external variable Value; but option buttons used to have .Selected, now not used)
         function GroupAPI:Dropdown(text, options, default, callback)
             if not Library:RegisterFlag(text, default) then return end
             local Value = default or options[1]
@@ -890,7 +890,7 @@ function Library:Tab(name)
             return control
         end
 
-        -- MultiDropdown
+        -- MultiDropdown (uses Selected attribute on option buttons)
         function GroupAPI:MultiDropdown(text, options, default, callback)
             if not Library:RegisterFlag(text, default or {}) then return end
             local Selected = {}
@@ -973,12 +973,12 @@ function Library:Tab(name)
                 ThemeObject(Opt, "BackgroundColor3", "Background")
                 ThemeObject(Opt, "TextColor3", "Text")
                 optionButtons[option] = Opt
-                Opt.Selected = Selected[option] or false
+                Opt:SetAttribute("Selected", Selected[option] or false)   -- FIXED
                 table.insert(Library.MultiOptions, Opt)
 
                 Opt.MouseButton1Click:Connect(function()
                     Selected[option] = not Selected[option]
-                    Opt.Selected = Selected[option]
+                    Opt:SetAttribute("Selected", Selected[option])   -- FIXED
                     Opt.BackgroundColor3 = Selected[option] and Library.Theme.Accent or Library.Theme.Surface2
                     Refresh()
                 end)
@@ -995,13 +995,13 @@ function Library:Tab(name)
                     for _,v in ipairs(selections) do
                         Selected[v] = true
                         if optionButtons[v] then
-                            optionButtons[v].Selected = true
+                            optionButtons[v]:SetAttribute("Selected", true)   -- FIXED
                             optionButtons[v].BackgroundColor3 = Library.Theme.Accent
                         end
                     end
                     for _,v in ipairs(options) do
                         if not Selected[v] and optionButtons[v] then
-                            optionButtons[v].Selected = false
+                            optionButtons[v]:SetAttribute("Selected", false)   -- FIXED
                             optionButtons[v].BackgroundColor3 = Library.Theme.Surface2
                         end
                     end
@@ -1018,7 +1018,7 @@ function Library:Tab(name)
             return control
         end
 
-        -- Keybind
+        -- Keybind (no instance attributes needed; but the waiting state is local)
         function GroupAPI:Keybind(text, default, onPress, onChanged)
             onChanged = onChanged or function() end
             if not Library:RegisterFlag(text, default) then return end
@@ -1105,7 +1105,7 @@ function Library:Tab(name)
             return control
         end
 
-        -- Textbox
+        -- Textbox (unchanged)
         function GroupAPI:Textbox(text, default, callback)
             if not Library:RegisterFlag(text, default or "") then return end
             local Value = default or ""
@@ -1163,7 +1163,7 @@ function Library:Tab(name)
             return control
         end
 
-        -- Colorpicker
+        -- Colorpicker (unchanged, no custom instance properties)
         function GroupAPI:Colorpicker(text, default, callback)
             if not Library:RegisterFlag(text, default) then return end
             local Color = default or Color3.fromRGB(255,255,255)
@@ -1301,44 +1301,36 @@ function Library:Tab(name)
     return TabAPI
 end
 
--- ==============================================
--- DESTROY (fully clean)
--- ==============================================
+-- Destroy
 function Library:Destroy()
     self.Destroyed = true
 
-    -- Cancel active tweens
     for _, tween in ipairs(self.ActiveTweens) do
         pcall(function() tween:Cancel() end)
     end
     table.clear(self.ActiveTweens)
 
-    -- Cancel waiting keybind connection
     if self.WaitingKeybind then
         pcall(function() self.WaitingKeybind:Disconnect() end)
         self.WaitingKeybind = nil
     end
 
-    -- Call Destroy on all elements (keybinds etc.)
     for _, element in pairs(self.Elements) do
         if type(element) == "table" and element.Destroy then
             pcall(element.Destroy)
         end
     end
 
-    -- Disconnect all stored connections
     for _, conn in ipairs(self.Connections) do
         pcall(function() conn:Disconnect() end)
     end
     table.clear(self.Connections)
 
-    -- Destroy detached frames
     for _, frame in ipairs(self.DetachedFrames) do
         pcall(function() frame:Destroy() end)
     end
     table.clear(self.DetachedFrames)
 
-    -- Clear theme object references
     for _, category in pairs(self.ThemeObjects) do
         table.clear(category)
     end
@@ -1362,9 +1354,7 @@ Close.MouseButton1Click:Connect(function()
     Library:Destroy()
 end)
 
--- ==============================================
--- CONFIG SYSTEM
--- ==============================================
+-- Config
 function Library:SaveConfig(name)
     local serialized = serialize(self.Flags)
     writefile("DarkHubV2_" .. name .. ".json", HttpService:JSONEncode(serialized))
@@ -1378,14 +1368,13 @@ function Library:LoadConfig(name)
         local success, raw = pcall(HttpService.JSONDecode, HttpService, data)
         if success and raw then
             local flags = deserialize(raw)
-            -- Update existing table instead of replacing
             for k,v in pairs(flags) do
                 self.Flags[k] = v
             end
             for flagName, value in pairs(flags) do
                 if self.Elements[flagName] then
                     pcall(function()
-                        self.Elements[flagName].Set(nil, value, true) -- silent
+                        self.Elements[flagName].Set(nil, value, true)
                     end)
                 end
             end
