@@ -1,7 +1,12 @@
 --[[
-    DARKHUB V2 – ATTRIBUTE‑SAFE EDITION
-    All custom instance fields replaced with SetAttribute/GetAttribute.
-    Zero runtime crashes on Roblox instances.
+    DARKHUB V2 – FINAL FIXED EDITION
+    - All custom properties replaced with Attributes
+    - Unique flag identifiers (no duplicates)
+    - Dropdown/MultiDropdown theme‑safe
+    - Dropdown instant‑close prevented
+    - Correct config loading
+    - Memory‑clean element removal
+    - Production‑ready API
 ]]
 
 local cloneref = cloneref or function(v) return v end
@@ -30,9 +35,9 @@ local Library = {
     OpenDropdown = nil,
     OpenColorpicker = nil,
     Keybinds = {},
-    Elements = {},
-    ToggleSwitches = {},       -- stores Switch frames (we'll use attributes)
-    MultiOptions = {},         -- stores option buttons (use attributes)
+    Elements = {},          -- flag → control object
+    ToggleSwitches = {},    -- list of switch frames (using attributes)
+    MultiOptions = {},      -- list of option buttons (using attributes)
     DetachedFrames = {},
     ActiveTweens = {},
     CreatedBlur = false,
@@ -183,13 +188,13 @@ local function createTween(obj, info, props)
 end
 
 -- Flag registration with namespace protection
-function Library:RegisterFlag(name, value)
-    if self.Flags[name] ~= nil then
-        warn("DarkHub V2: Flag '" .. name .. "' is already in use. Use a unique name.")
+function Library:RegisterFlag(flag, value)
+    if self.Flags[flag] ~= nil then
+        warn("DarkHub V2: Flag '" .. flag .. "' is already in use.")
         return false
     end
-    self.Flags[name] = value
-    self.FlagNamespaces[name] = true
+    self.Flags[flag] = value
+    self.FlagNamespaces[flag] = true
     return true
 end
 
@@ -205,19 +210,23 @@ function Library:SetTheme(accentColor)
             pcall(function() v.Object[v.Property] = accentColor end)
         end
     end
-    -- Update toggle switches that are ON (using attributes)
+    -- Toggle switches
     for _, switchFrame in ipairs(self.ToggleSwitches) do
         if IsAlive(switchFrame) and switchFrame:GetAttribute("State") then
             switchFrame.BackgroundColor3 = accentColor
         end
     end
-    -- Update selected multi‑dropdown options (using attributes)
+    -- Multi options
     for _, optButton in ipairs(self.MultiOptions) do
-        if IsAlive(optButton) and optButton:GetAttribute("Selected") then
-            optButton.BackgroundColor3 = accentColor
+        if IsAlive(optButton) then
+            if optButton:GetAttribute("Selected") then
+                optButton.BackgroundColor3 = accentColor
+            else
+                optButton.BackgroundColor3 = self.Theme.Surface2
+            end
         end
     end
-    -- Update tab buttons based on selection state (using attributes)
+    -- Tab buttons
     for _, tab in ipairs(self.Tabs) do
         if IsAlive(tab.Button) then
             tab.Button.BackgroundColor3 =
@@ -263,7 +272,6 @@ ThemeObject(Main, "BackgroundColor3", "Background")
 
 -- Topbar
 local Topbar = Create("Frame", { Parent = Main, Size = UDim2.new(1,0,0,42), BackgroundTransparency = 1 })
-
 local Title = Create("TextLabel", {
     Parent = Topbar, Position = UDim2.new(0,14,0,0), Size = UDim2.new(1,0,1,0),
     BackgroundTransparency = 1, Font = Enum.Font.GothamBold, Text = "DARKHUB V2",
@@ -348,7 +356,7 @@ task.spawn(function()
     end
 end)
 
--- Notifications with limit
+-- Notifications
 local NotificationHolder = Create("Frame", {
     Parent = ScreenGui, AnchorPoint = Vector2.new(1,1),
     Position = UDim2.new(1,-20,1,-20), Size = UDim2.new(0,320,1,0),
@@ -361,12 +369,9 @@ local NotificationLayout = Create("UIListLayout", {
 })
 
 function Library:Notify(title, text)
-    -- Purge excess notifications
     local existing = {}
     for _, child in ipairs(NotificationHolder:GetChildren()) do
-        if child:IsA("Frame") then
-            table.insert(existing, child)
-        end
+        if child:IsA("Frame") then table.insert(existing, child) end
     end
     if #existing >= self.MaxNotifications then
         existing[1]:Destroy()
@@ -456,10 +461,10 @@ ConnectAndStore(UIS.InputChanged, function(input)
     if resizeDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - resizeStart
         Main.Size = UDim2.new(0, math.max(400, startSize.X + delta.X), 0, math.max(300, startSize.Y + delta.Y))
-        if Library.OpenDropdown and Library.OpenDropdown.List and Library.OpenDropdown.Button then
+        if Library.OpenDropdown and IsAlive(Library.OpenDropdown.List) and IsAlive(Library.OpenDropdown.Button) then
             Library.OpenDropdown.List.Position = UDim2.new(0, Library.OpenDropdown.Button.AbsolutePosition.X, 0, Library.OpenDropdown.Button.AbsolutePosition.Y + Library.OpenDropdown.Button.AbsoluteSize.Y + 2)
         end
-        if Library.OpenColorpicker and Library.OpenColorpicker.Picker and Library.OpenColorpicker.Preview then
+        if Library.OpenColorpicker and IsAlive(Library.OpenColorpicker.Picker) and IsAlive(Library.OpenColorpicker.Preview) then
             local pos = Library.OpenColorpicker.Preview.AbsolutePosition
             Library.OpenColorpicker.Picker.Position = UDim2.new(0, pos.X - 140, 0, pos.Y + 26)
         end
@@ -471,14 +476,10 @@ end)
 
 -- Minimize / Dock
 Minimize.MouseButton1Click:Connect(function()
-    Main.Visible = false
-    Dock.Visible = true
-    Blur.Size = 0
+    Main.Visible = false; Dock.Visible = true; Blur.Size = 0
 end)
 Dock.MouseButton1Click:Connect(function()
-    Main.Visible = true
-    Dock.Visible = false
-    Blur.Size = 18
+    Main.Visible = true; Dock.Visible = false; Blur.Size = 18
 end)
 
 -- Centralized input handling
@@ -489,9 +490,7 @@ ConnectAndStore(UIS.InputBegan, function(input, gp)
     if gp then return end
     for _, bind in ipairs(Library.Keybinds) do
         if input.KeyCode == bind.Key then
-            task.spawn(function()
-                safeCallback(bind.Callback, bind.Key)
-            end)
+            task.spawn(function() safeCallback(bind.Callback, bind.Key) end)
         end
     end
 end)
@@ -538,7 +537,7 @@ ConnectAndStore(UIS.InputEnded, function(input)
     end
 end)
 
--- Global click outside handler (null‑safe)
+-- Global click outside handler
 ConnectAndStore(UIS.InputBegan, function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
         local mousePos = UIS:GetMouseLocation()
@@ -564,7 +563,7 @@ ConnectAndStore(UIS.InputBegan, function(input)
 end)
 
 -- ==============================================
--- TAB SYSTEM (all IsSelected/State/Selected use attributes)
+-- TAB SYSTEM (flags separate from labels)
 -- ==============================================
 function Library:Tab(name)
     local TabButton = Create("TextButton", {
@@ -574,22 +573,22 @@ function Library:Tab(name)
     })
     Corner(TabButton, 6)
     ThemeObject(TabButton, "TextColor3", "Text")
-    TabButton:SetAttribute("IsSelected", false)   -- FIXED
+    TabButton:SetAttribute("IsSelected", false)
 
-    local Page = Create("Frame", { Parent = Content, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Visible = false })
-    local Left = Create("ScrollingFrame", { Parent = Page, Size = UDim2.new(0.5,-8,1,0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new() })
-    local Right = Create("ScrollingFrame", { Parent = Page, Position = UDim2.new(0.5,8,0,0), Size = UDim2.new(0.5,-8,1,0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new() })
+    local Page = Create("Frame", { Parent = Content, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Visible = false, ClipsDescendants = false })
+    local Left = Create("ScrollingFrame", { Parent = Page, Size = UDim2.new(0.5,-8,1,0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), ClipsDescendants = false })
+    local Right = Create("ScrollingFrame", { Parent = Page, Position = UDim2.new(0.5,8,0,0), Size = UDim2.new(0.5,-8,1,0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), ClipsDescendants = false })
     Create("UIListLayout", {Parent = Left, Padding = UDim.new(0,12)})
     Create("UIListLayout", {Parent = Right, Padding = UDim.new(0,12)})
 
     local function Select()
         for _,v in pairs(Library.Tabs) do
             v.Page.Visible = false
-            v.Button:SetAttribute("IsSelected", false)   -- FIXED
+            v.Button:SetAttribute("IsSelected", false)
             v.Button.BackgroundColor3 = Library.Theme.Surface
         end
         Page.Visible = true
-        TabButton:SetAttribute("IsSelected", true)   -- FIXED
+        TabButton:SetAttribute("IsSelected", true)
         TabButton.BackgroundColor3 = Library.Theme.Accent
     end
     TabButton.MouseButton1Click:Connect(Select)
@@ -653,9 +652,11 @@ function Library:Tab(name)
             end)
         end
 
-        -- Toggle (using attributes for state)
-        function GroupAPI:Toggle(text, default, callback)
-            if not Library:RegisterFlag(text, default) then return end
+        -- ==============================================
+        -- TOGGLE (text, flag, default, callback)
+        -- ==============================================
+        function GroupAPI:Toggle(text, flag, default, callback)
+            if not Library:RegisterFlag(flag, default) then return end
             local State = default
             local Frame = Create("Frame", {
                 Parent = Holder, Size = UDim2.new(1,0,0,36),
@@ -680,14 +681,14 @@ function Library:Tab(name)
                 Size = UDim2.new(0,16,0,16), BackgroundColor3 = Color3.new(1,1,1), BorderSizePixel = 0
             })
             Corner(Knob, 20)
-            Switch:SetAttribute("State", State)   -- FIXED
+            Switch:SetAttribute("State", State)
             table.insert(Library.ToggleSwitches, Switch)
 
             Frame.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
                     State = not State
-                    Library.Flags[text] = State
-                    Switch:SetAttribute("State", State)   -- FIXED
+                    Library.Flags[flag] = State
+                    Switch:SetAttribute("State", State)
                     Switch.BackgroundColor3 = State and Library.Theme.Accent or Color3.fromRGB(55,55,55)
                     createTween(Knob, TweenInfo.new(0.15), {
                         Position = State and UDim2.new(1,-18,0.5,-8) or UDim2.new(0,2,0.5,-8)
@@ -699,8 +700,8 @@ function Library:Tab(name)
             local control = {
                 Set = function(_, v, silent)
                     State = v
-                    Library.Flags[text] = v
-                    Switch:SetAttribute("State", v)   -- FIXED
+                    Library.Flags[flag] = v
+                    Switch:SetAttribute("State", v)
                     Switch.BackgroundColor3 = State and Library.Theme.Accent or Color3.fromRGB(55,55,55)
                     Knob.Position = State and UDim2.new(1,-18,0.5,-8) or UDim2.new(0,2,0.5,-8)
                     if not silent then
@@ -708,17 +709,25 @@ function Library:Tab(name)
                     end
                 end,
                 Get = function() return State end,
-                Destroy = function() Switch:SetAttribute("State", false) end
+                Destroy = function()
+                    Switch:SetAttribute("State", false)
+                    -- remove from list
+                    for i, v in ipairs(Library.ToggleSwitches) do
+                        if v == Switch then table.remove(Library.ToggleSwitches, i); break end
+                    end
+                end
             }
-            Library.Elements[text] = control
+            Library.Elements[flag] = control
             return control
         end
 
-        -- Slider (unchanged except using attributes where needed – none here)
-        function GroupAPI:Slider(text, min, max, default, decimals, callback)
+        -- ==============================================
+        -- SLIDER (text, flag, min, max, default, decimals?, callback)
+        -- ==============================================
+        function GroupAPI:Slider(text, flag, min, max, default, decimals, callback)
             if type(decimals) == "function" then callback = decimals; decimals = 0 end
             decimals = decimals or 0
-            if not Library:RegisterFlag(text, default) then return end
+            if not Library:RegisterFlag(flag, default) then return end
             local Value = default
             local Frame = Create("Frame", {
                 Parent = Holder, Size = UDim2.new(1,0,0,54),
@@ -754,7 +763,7 @@ function Library:Tab(name)
 
             local sliderData = {
                 Bar = Bar, Fill = Fill, ValueLabel = ValueLabel,
-                Min = min, Max = max, Decimals = decimals, Value = Value, Flag = text, Callback = callback
+                Min = min, Max = max, Decimals = decimals, Value = Value, Flag = flag, Callback = callback
             }
 
             Bar.InputBegan:Connect(function(input)
@@ -766,7 +775,7 @@ function Library:Tab(name)
                     local factor = 10 ^ decimals
                     Value = math.floor(raw * factor + 0.5) / factor
                     ValueLabel.Text = tostring(Value)
-                    Library.Flags[text] = Value
+                    Library.Flags[flag] = Value
                     task.spawn(function() safeCallback(callback, Value) end)
                 end
             end)
@@ -776,7 +785,7 @@ function Library:Tab(name)
                 Set = function(_, v, silent)
                     v = math.clamp(v, min, max)
                     Value = v
-                    Library.Flags[text] = v
+                    Library.Flags[flag] = v
                     local Percent = (Value - min)/(max - min)
                     Fill.Size = UDim2.new(Percent,0,1,0)
                     ValueLabel.Text = tostring(Value)
@@ -787,13 +796,15 @@ function Library:Tab(name)
                 Get = function() return Value end,
                 Destroy = function() end
             }
-            Library.Elements[text] = control
+            Library.Elements[flag] = control
             return control
         end
 
-        -- Dropdown (using attributes for selected? not needed – we use external variable Value; but option buttons used to have .Selected, now not used)
-        function GroupAPI:Dropdown(text, options, default, callback)
-            if not Library:RegisterFlag(text, default) then return end
+        -- ==============================================
+        -- DROPDOWN (text, flag, options, default, callback)
+        -- ==============================================
+        function GroupAPI:Dropdown(text, flag, options, default, callback)
+            if not Library:RegisterFlag(flag, default) then return end
             local Value = default or options[1]
             local Open = false
             local Frame = Create("Frame", {
@@ -812,7 +823,8 @@ function Library:Tab(name)
             local Button = Create("TextButton", {
                 Parent = Frame, Position = UDim2.new(0.45,0,0.5,-12), Size = UDim2.new(0.5,-6,0,24),
                 BackgroundColor3 = Library.Theme.Background, BorderSizePixel = 0,
-                Text = tostring(Value), Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Library.Theme.Text
+                Text = tostring(Value), Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Library.Theme.Text,
+                ZIndex = Library.ZIndex + 1
             })
             Corner(Button, 4)
             ThemeObject(Button, "BackgroundColor3", "Background")
@@ -820,12 +832,12 @@ function Library:Tab(name)
 
             local List = Create("Frame", {
                 Parent = ScreenGui, Visible = false, Size = UDim2.new(0, 200, 0, (#options * 26) + 4),
-                BackgroundColor3 = Library.Theme.Surface, BorderSizePixel = 0, ZIndex = Library.ZIndex + 1
+                BackgroundColor3 = Library.Theme.Surface, BorderSizePixel = 0, ZIndex = Library.ZIndex + 2
             })
             Corner(List, 5)
             Stroke(List)
             table.insert(Library.DetachedFrames, List)
-            applyZIndex(List, Library.ZIndex + 1)
+            applyZIndex(List, Library.ZIndex + 2)
 
             Create("UIListLayout", { Parent = List, Padding = UDim.new(0,2) })
             Create("UIPadding", { Parent = List, PaddingTop = UDim.new(0,2), PaddingBottom = UDim.new(0,2) })
@@ -839,7 +851,7 @@ function Library:Tab(name)
             end
 
             local function OpenDropdown()
-                if Library.OpenDropdown and Library.OpenDropdown.List then
+                if Library.OpenDropdown and IsAlive(Library.OpenDropdown.List) then
                     Library.OpenDropdown.List.Visible = false
                 end
                 local Pos = Button.AbsolutePosition
@@ -847,6 +859,7 @@ function Library:Tab(name)
                 List.Size = UDim2.new(0, math.max(Button.AbsoluteSize.X, 100), 0, (#options * 26) + 4)
                 List.Visible = true
                 Open = true
+                task.wait()  -- prevents instant close from same click
                 Library.OpenDropdown = { List = List, Button = Button }
             end
 
@@ -855,15 +868,14 @@ function Library:Tab(name)
                     Parent = List, Size = UDim2.new(1,-4,0,24),
                     BackgroundColor3 = Library.Theme.Surface2, BorderSizePixel = 0,
                     Text = option, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Library.Theme.Text,
-                    ZIndex = Library.ZIndex + 2
+                    ZIndex = List.ZIndex + 1
                 })
                 Corner(Opt, 4)
-                ThemeObject(Opt, "BackgroundColor3", "Background")
-                ThemeObject(Opt, "TextColor3", "Text")
+                ThemeObject(Opt, "TextColor3", "Text")  -- only text, not background!
                 Opt.MouseButton1Click:Connect(function()
                     Value = option
                     Button.Text = option
-                    Library.Flags[text] = Value
+                    Library.Flags[flag] = Value
                     CloseDropdown()
                     task.spawn(function() safeCallback(callback, Value) end)
                 end)
@@ -878,21 +890,23 @@ function Library:Tab(name)
                 Set = function(_, v, silent)
                     Value = v
                     Button.Text = tostring(v)
-                    Library.Flags[text] = v
+                    Library.Flags[flag] = v
                     if not silent then
                         task.spawn(function() safeCallback(callback, v) end)
                     end
                 end,
                 Get = function() return Value end,
-                Destroy = function() end
+                Destroy = function() List:Destroy() end
             }
-            Library.Elements[text] = control
+            Library.Elements[flag] = control
             return control
         end
 
-        -- MultiDropdown (uses Selected attribute on option buttons)
-        function GroupAPI:MultiDropdown(text, options, default, callback)
-            if not Library:RegisterFlag(text, default or {}) then return end
+        -- ==============================================
+        -- MULTIDROPDOWN (text, flag, options, default, callback)
+        -- ==============================================
+        function GroupAPI:MultiDropdown(text, flag, options, default, callback)
+            if not Library:RegisterFlag(flag, default or {}) then return end
             local Selected = {}
             for _,v in pairs(default or {}) do Selected[v] = true end
             local Open = false
@@ -912,7 +926,8 @@ function Library:Tab(name)
             local Button = Create("TextButton", {
                 Parent = Frame, Position = UDim2.new(0.45,0,0.5,-12), Size = UDim2.new(0.5,-6,0,24),
                 BackgroundColor3 = Library.Theme.Background, BorderSizePixel = 0,
-                Text = "...", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Library.Theme.Text
+                Text = "...", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Library.Theme.Text,
+                ZIndex = Library.ZIndex + 1
             })
             Corner(Button, 4)
             ThemeObject(Button, "BackgroundColor3", "Background")
@@ -920,12 +935,12 @@ function Library:Tab(name)
 
             local List = Create("Frame", {
                 Parent = ScreenGui, Visible = false, Size = UDim2.new(0, 200, 0, (#options * 26) + 4),
-                BackgroundColor3 = Library.Theme.Surface, BorderSizePixel = 0, ZIndex = Library.ZIndex + 1
+                BackgroundColor3 = Library.Theme.Surface, BorderSizePixel = 0, ZIndex = Library.ZIndex + 2
             })
             Corner(List, 5)
             Stroke(List)
             table.insert(Library.DetachedFrames, List)
-            applyZIndex(List, Library.ZIndex + 1)
+            applyZIndex(List, Library.ZIndex + 2)
 
             Create("UIListLayout", { Parent = List, Padding = UDim.new(0,2) })
             Create("UIPadding", { Parent = List, PaddingTop = UDim.new(0,2), PaddingBottom = UDim.new(0,2) })
@@ -937,7 +952,7 @@ function Library:Tab(name)
                 Button.Text = #Names > 0 and (#full > 20 and full:sub(1,17).."..." or full) or "None"
                 local out = {}
                 for _,v in ipairs(options) do if Selected[v] then table.insert(out, v) end end
-                Library.Flags[text] = out
+                Library.Flags[flag] = out
                 task.spawn(function() safeCallback(callback, out) end)
             end
 
@@ -950,7 +965,7 @@ function Library:Tab(name)
             end
 
             local function OpenDropdown()
-                if Library.OpenDropdown and Library.OpenDropdown.List then
+                if Library.OpenDropdown and IsAlive(Library.OpenDropdown.List) then
                     Library.OpenDropdown.List.Visible = false
                 end
                 local Pos = Button.AbsolutePosition
@@ -958,6 +973,7 @@ function Library:Tab(name)
                 List.Size = UDim2.new(0, math.max(Button.AbsoluteSize.X, 100), 0, (#options * 26) + 4)
                 List.Visible = true
                 Open = true
+                task.wait()
                 Library.OpenDropdown = { List = List, Button = Button }
             end
 
@@ -967,18 +983,17 @@ function Library:Tab(name)
                     Parent = List, Size = UDim2.new(1,-4,0,24),
                     BackgroundColor3 = Selected[option] and Library.Theme.Accent or Library.Theme.Surface2,
                     BorderSizePixel = 0, Text = option, Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Library.Theme.Text,
-                    ZIndex = Library.ZIndex + 2
+                    ZIndex = List.ZIndex + 1
                 })
                 Corner(Opt, 4)
-                ThemeObject(Opt, "BackgroundColor3", "Background")
-                ThemeObject(Opt, "TextColor3", "Text")
+                ThemeObject(Opt, "TextColor3", "Text")  -- only text!
                 optionButtons[option] = Opt
-                Opt:SetAttribute("Selected", Selected[option] or false)   -- FIXED
+                Opt:SetAttribute("Selected", Selected[option] or false)
                 table.insert(Library.MultiOptions, Opt)
 
                 Opt.MouseButton1Click:Connect(function()
                     Selected[option] = not Selected[option]
-                    Opt:SetAttribute("Selected", Selected[option])   -- FIXED
+                    Opt:SetAttribute("Selected", Selected[option])
                     Opt.BackgroundColor3 = Selected[option] and Library.Theme.Accent or Library.Theme.Surface2
                     Refresh()
                 end)
@@ -995,13 +1010,13 @@ function Library:Tab(name)
                     for _,v in ipairs(selections) do
                         Selected[v] = true
                         if optionButtons[v] then
-                            optionButtons[v]:SetAttribute("Selected", true)   -- FIXED
+                            optionButtons[v]:SetAttribute("Selected", true)
                             optionButtons[v].BackgroundColor3 = Library.Theme.Accent
                         end
                     end
                     for _,v in ipairs(options) do
                         if not Selected[v] and optionButtons[v] then
-                            optionButtons[v]:SetAttribute("Selected", false)   -- FIXED
+                            optionButtons[v]:SetAttribute("Selected", false)
                             optionButtons[v].BackgroundColor3 = Library.Theme.Surface2
                         end
                     end
@@ -1012,16 +1027,25 @@ function Library:Tab(name)
                     for _,v in ipairs(options) do if Selected[v] then table.insert(out, v) end end
                     return out
                 end,
-                Destroy = function() end
+                Destroy = function()
+                    List:Destroy()
+                    for _,v in ipairs(options) do
+                        for i, opt in ipairs(Library.MultiOptions) do
+                            if opt == optionButtons[v] then table.remove(Library.MultiOptions, i); break end
+                        end
+                    end
+                end
             }
-            Library.Elements[text] = control
+            Library.Elements[flag] = control
             return control
         end
 
-        -- Keybind (no instance attributes needed; but the waiting state is local)
-        function GroupAPI:Keybind(text, default, onPress, onChanged)
+        -- ==============================================
+        -- KEYBIND (text, flag, default, onPress, onChanged?)
+        -- ==============================================
+        function GroupAPI:Keybind(text, flag, default, onPress, onChanged)
             onChanged = onChanged or function() end
-            if not Library:RegisterFlag(text, default) then return end
+            if not Library:RegisterFlag(flag, default) then return end
             local Key = default or Enum.KeyCode.E
             local Waiting = false
             local destroyed = false
@@ -1066,7 +1090,7 @@ function Library:Tab(name)
                         Key = input.KeyCode
                         Button.Text = Key.Name
                         Waiting = false
-                        Library.Flags[text] = Key
+                        Library.Flags[flag] = Key
                         task.spawn(function() safeCallback(onChanged, Key) end)
                         for _, bind in ipairs(Library.Keybinds) do
                             if bind.Id == bindId then bind.Key = Key break end
@@ -1083,10 +1107,8 @@ function Library:Tab(name)
                 Set = function(_, v, silent)
                     Key = v
                     Button.Text = v.Name
-                    Library.Flags[text] = v
-                    if not silent then
-                        task.spawn(function() safeCallback(onChanged, v) end)
-                    end
+                    Library.Flags[flag] = v
+                    if not silent then task.spawn(function() safeCallback(onChanged, v) end) end
                     for _, bind in ipairs(Library.Keybinds) do
                         if bind.Id == bindId then bind.Key = v break end
                     end
@@ -1101,13 +1123,15 @@ function Library:Tab(name)
                     end
                 end
             }
-            Library.Elements[text] = control
+            Library.Elements[flag] = control
             return control
         end
 
-        -- Textbox (unchanged)
-        function GroupAPI:Textbox(text, default, callback)
-            if not Library:RegisterFlag(text, default or "") then return end
+        -- ==============================================
+        -- TEXTBOX (text, flag, default, callback)
+        -- ==============================================
+        function GroupAPI:Textbox(text, flag, default, callback)
+            if not Library:RegisterFlag(flag, default or "") then return end
             local Value = default or ""
             local Frame = Create("Frame", {
                 Parent = Holder, Size = UDim2.new(1,0,0,40),
@@ -1141,7 +1165,7 @@ function Library:Tab(name)
             Box.FocusLost:Connect(function()
                 createTween(StrokeObj, TweenInfo.new(0.15), { Color = Library.Theme.Outline })
                 Value = Box.Text
-                Library.Flags[text] = Value
+                Library.Flags[flag] = Value
                 task.spawn(function() safeCallback(callback, Value) end)
             end)
 
@@ -1151,21 +1175,21 @@ function Library:Tab(name)
                     v = tostring(v)
                     Value = v
                     Box.Text = v
-                    Library.Flags[text] = v
-                    if not silent then
-                        task.spawn(function() safeCallback(callback, v) end)
-                    end
+                    Library.Flags[flag] = v
+                    if not silent then task.spawn(function() safeCallback(callback, v) end) end
                 end,
                 Get = function() return Value end,
                 Destroy = function() end
             }
-            Library.Elements[text] = control
+            Library.Elements[flag] = control
             return control
         end
 
-        -- Colorpicker (unchanged, no custom instance properties)
-        function GroupAPI:Colorpicker(text, default, callback)
-            if not Library:RegisterFlag(text, default) then return end
+        -- ==============================================
+        -- COLORPICKER (text, flag, default, callback)
+        -- ==============================================
+        function GroupAPI:Colorpicker(text, flag, default, callback)
+            if not Library:RegisterFlag(flag, default) then return end
             local Color = default or Color3.fromRGB(255,255,255)
             local Open = false
             local Hue, Sat, Val = Color:ToHSV()
@@ -1227,7 +1251,7 @@ function Library:Tab(name)
             local cpData = {
                 Palette = Palette, HueBar = HueBar, Selector = Selector, HueSelector = HueSelector,
                 Preview = Preview, Picker = Picker, Hue = Hue, Sat = Sat, Val = Val,
-                DraggingPalette = false, DraggingHue = false, Flag = text, Callback = callback,
+                DraggingPalette = false, DraggingHue = false, Flag = flag, Callback = callback,
             }
 
             function cpData.UpdateColor()
@@ -1240,8 +1264,7 @@ function Library:Tab(name)
 
             Palette.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    cpData.DraggingPalette = true
-                    cpData.DraggingHue = false
+                    cpData.DraggingPalette = true; cpData.DraggingHue = false
                     Library.ActiveColorpicker = cpData
                     local x = math.clamp(input.Position.X - Palette.AbsolutePosition.X, 0, Palette.AbsoluteSize.X)
                     local y = math.clamp(input.Position.Y - Palette.AbsolutePosition.Y, 0, Palette.AbsoluteSize.Y)
@@ -1253,8 +1276,7 @@ function Library:Tab(name)
             end)
             HueBar.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    cpData.DraggingHue = true
-                    cpData.DraggingPalette = false
+                    cpData.DraggingHue = true; cpData.DraggingPalette = false
                     Library.ActiveColorpicker = cpData
                     local y = math.clamp(input.Position.Y - HueBar.AbsolutePosition.Y, 0, HueBar.AbsoluteSize.Y)
                     cpData.Hue = math.clamp(y / HueBar.AbsoluteSize.Y, 0, 0.999)
@@ -1284,15 +1306,13 @@ function Library:Tab(name)
                     cpData.Selector.Position = UDim2.new(cpData.Sat, 0, 1 - cpData.Val, 0)
                     cpData.HueSelector.Position = UDim2.new(0, 0, cpData.Hue, 0)
                     cpData.Palette.BackgroundColor3 = Color3.fromHSV(cpData.Hue, 1, 1)
-                    Library.Flags[text] = v
-                    if not silent then
-                        task.spawn(function() safeCallback(callback, v) end)
-                    end
+                    Library.Flags[flag] = v
+                    if not silent then task.spawn(function() safeCallback(callback, v) end) end
                 end,
                 Get = function() return Color end,
-                Destroy = function() end
+                Destroy = function() Picker:Destroy() end
             }
-            Library.Elements[text] = control
+            Library.Elements[flag] = control
             return control
         end
 
@@ -1374,7 +1394,7 @@ function Library:LoadConfig(name)
             for flagName, value in pairs(flags) do
                 if self.Elements[flagName] then
                     pcall(function()
-                        self.Elements[flagName].Set(nil, value, true)
+                        self.Elements[flagName]:Set(value, true)  -- correct method call
                     end)
                 end
             end
