@@ -13,8 +13,9 @@
 -- Labels
 -- Paragraphs
 -- Notifications
--- Minimize
--- Blur
+-- Smart Minimize
+-- Topbar Dock Mode
+-- Blur Controller
 -- Executor Safe
 
 local cloneref = cloneref or function(v)
@@ -234,33 +235,108 @@ end)
 
 local minimized = false
 
+local DockButton = Create("TextButton", {
+    Parent = ScreenGui,
+    Visible = false,
+    Size = UDim2.new(0,180,0,34),
+    Position = UDim2.new(0.5,-90,0,12),
+    BackgroundColor3 = Theme.Surface,
+    BorderSizePixel = 0,
+    Text = "PREMIUM UI",
+    Font = Enum.Font.GothamBold,
+    TextSize = 13,
+    TextColor3 = Theme.Text,
+    ZIndex = 999
+})
+
+Create("UICorner", {
+    Parent = DockButton,
+    CornerRadius = UDim.new(0,6)
+})
+
+local minimized = false
+
 Connect(Minimize.MouseButton1Click, function()
 
     minimized = not minimized
 
     if minimized then
-        Content.Visible = false
-        Sidebar.Visible = false
 
         TweenService:Create(
-            Main,
-            TweenInfo.new(0.25),
+            Blur,
+            TweenInfo.new(0.2),
             {
-                Size = UDim2.new(0,720,0,42)
+                Size = 0
             }
         ):Play()
-    else
-        Content.Visible = true
-        Sidebar.Visible = true
 
         TweenService:Create(
             Main,
             TweenInfo.new(0.25),
             {
-                Size = UDim2.new(0,720,0,520)
+                Size = UDim2.new(0,0,0,0),
+                Position = UDim2.new(0.5,0,0,-100)
+            }
+        ):Play()
+
+        task.wait(0.25)
+
+        Main.Visible = false
+        DockButton.Visible = true
+
+    else
+
+        Main.Visible = true
+        DockButton.Visible = false
+
+        Main.Size = UDim2.new(0,0,0,0)
+        Main.Position = UDim2.new(0.5,0,0,-100)
+
+        TweenService:Create(
+            Main,
+            TweenInfo.new(0.25),
+            {
+                Size = UDim2.new(0,720,0,520),
+                Position = UDim2.new(0.5,-360,0.5,-260)
+            }
+        ):Play()
+
+        TweenService:Create(
+            Blur,
+            TweenInfo.new(0.2),
+            {
+                Size = 18
             }
         ):Play()
     end
+end)
+
+Connect(DockButton.MouseButton1Click, function()
+
+    minimized = false
+
+    Main.Visible = true
+    DockButton.Visible = false
+
+    Main.Size = UDim2.new(0,0,0,0)
+    Main.Position = UDim2.new(0.5,0,0,-100)
+
+    TweenService:Create(
+        Main,
+        TweenInfo.new(0.25),
+        {
+            Size = UDim2.new(0,720,0,520),
+            Position = UDim2.new(0.5,-360,0.5,-260)
+        }
+    ):Play()
+
+    TweenService:Create(
+        Blur,
+        TweenInfo.new(0.2),
+        {
+            Size = 18
+        }
+    ):Play()
 end)
 
 function Library:Notify(title, text)
@@ -709,9 +785,17 @@ function Library:Tab(name)
         function GroupAPI:Dropdown(text, options, default, callback)
 
             local selected = default or options[1]
+            local opened = false
+
+            local DropdownHolder = Create("Frame", {
+                Parent = Holder,
+                Size = UDim2.new(1,0,0,36),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1
+            })
 
             local Drop = Create("TextButton", {
-                Parent = Holder,
+                Parent = DropdownHolder,
                 Size = UDim2.new(1,0,0,36),
                 BackgroundColor3 = Theme.Surface2,
                 BorderSizePixel = 0,
@@ -726,14 +810,14 @@ function Library:Tab(name)
                 CornerRadius = UDim.new(0,5)
             })
 
-            local opened = false
-
             local List = Create("Frame", {
-                Parent = Holder,
+                Parent = DropdownHolder,
                 Visible = false,
-                Size = UDim2.new(1,0,0,#options * 30),
-                BackgroundColor3 = Theme.Surface2,
-                BorderSizePixel = 0
+                Position = UDim2.new(0,0,0,40),
+                Size = UDim2.new(1,0,0,#options * 28),
+                BackgroundColor3 = Theme.Surface,
+                BorderSizePixel = 0,
+                ClipsDescendants = true
             })
 
             Create("UICorner", {
@@ -742,14 +826,15 @@ function Library:Tab(name)
             })
 
             local Layout = Create("UIListLayout", {
-                Parent = List
+                Parent = List,
+                Padding = UDim.new(0,2)
             })
 
             for _,opt in pairs(options) do
 
                 local Btn = Create("TextButton", {
                     Parent = List,
-                    Size = UDim2.new(1,0,0,30),
+                    Size = UDim2.new(1,0,0,26),
                     BackgroundTransparency = 1,
                     Text = opt,
                     Font = Enum.Font.Gotham,
@@ -758,10 +843,16 @@ function Library:Tab(name)
                 })
 
                 Connect(Btn.MouseButton1Click, function()
+
                     selected = opt
+
                     Drop.Text = text .. " : " .. opt
-                    List.Visible = false
+
                     opened = false
+                    List.Visible = false
+
+                    DropdownHolder.Size = UDim2.new(1,0,0,36)
+
                     pcall(function()
                         callback(opt)
                     end)
@@ -769,8 +860,14 @@ function Library:Tab(name)
             end
 
             Connect(Drop.MouseButton1Click, function()
+
                 opened = not opened
+
                 List.Visible = opened
+
+                DropdownHolder.Size = opened
+                    and UDim2.new(1,0,0,40 + (#options * 28))
+                    or UDim2.new(1,0,0,36)
             end)
         end
 
@@ -931,4 +1028,3 @@ function Library:Tab(name)
 end
 
 return Library
-
